@@ -13,32 +13,29 @@ import yaml
 
 from common.config import OUTPUT_FOLDER, EMAIL_SENAT_FILE
 from common.logger import logger
-from download.core import read_file
+from download.core import read_json, read_csv
 from process.core import Elected
 
 
-def add_email_adresses(senats_dict: Dict[str, Any]) -> None:
+async def add_email_adresses(senats_dict: Dict[str, Elected]) -> None:
     email_dict: Dict[str, str] = {}
 
     if not EMAIL_SENAT_FILE:
         logger.warning("Cannot add email addresses for senat")
         return
 
-    with open(EMAIL_SENAT_FILE, "r") as csvfile:
-        ref_reader = csv.reader(csvfile, delimiter=",")
-        _ = next(ref_reader, None)  # skip header
-
-        for row in ref_reader:
-            email_dict[row[0]] = row[1]
+    email_reader: csv.DictReader = await read_csv(EMAIL_SENAT_FILE)
+    for row in email_reader:
+        email_dict[row["senmat"]] = row["senema"]
 
     missing_email: Set[str] = senats_dict.keys() - email_dict.keys()
     found_email: Set[str] = senats_dict.keys() & email_dict.keys()
 
     for id in missing_email:
-        logger.warning("NOT IN REFERENCE: %s", senats_dict[id])
+        logger.warning("MISSING EMAIL FOR: %s", senats_dict[id])
 
     for id in found_email:
-        senats_dict[id]["email"] = email_dict[id]
+        senats_dict[id].email = email_dict[id]
 
 
 async def process_file_senat_async(senat_file: Path) -> None:
@@ -46,18 +43,18 @@ async def process_file_senat_async(senat_file: Path) -> None:
 
     senats: List[Elected] = []
 
-    for data in await read_file(senat_file):
+    for data in await read_json(senat_file):
         senats.append(await Elected.from_senat_json(data))
 
-    senats_dict: Dict[str, Any] = {senat.ref: senat.to_dict() for senat in senats}
-    add_email_adresses(senats_dict)
+    senats_dict: Dict[str, Elected] = {senat.ref: senat for senat in senats}
+    await add_email_adresses(senats_dict)
 
     output: Dict[str, Any] = {
         "metadata": {
             "last_updated": datetime.now().isoformat(),
             "count": len(senats_dict),
         },
-        "deputies": senats_dict,
+        "members": {k: v.to_dict() for k, v in senats_dict.items()},
     }
 
     async with aiofiles.open(

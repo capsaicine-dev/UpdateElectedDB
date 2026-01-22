@@ -6,8 +6,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any, AsyncIterator, Optional
+import csv
 import zipfile
+from typing import Any, AsyncIterator, Optional
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -20,21 +21,28 @@ from common.logger import logger
 
 
 def show_progress(
-        p_url: str,
-        p_content_length: Optional[str],
-        p_chunk_size: int,
-        p_nb_chunks_wrote: int,
-        p_last_show: Optional[datetime]) -> datetime:
+    p_url: str,
+    p_content_length: Optional[str],
+    p_chunk_size: int,
+    p_nb_chunks_wrote: int,
+    p_last_show: Optional[datetime],
+) -> datetime:
     """Show progress of download in log"""
     now = datetime.now()
     update_second = UPDATE_PROGRESS_SECOND
-    if not p_last_show or (update_second != 0 and (now - p_last_show).seconds > update_second):
+    if not p_last_show or (
+        update_second != 0 and (now - p_last_show).seconds > update_second
+    ):
         size_wrote_chunks_mb = ((p_chunk_size * p_nb_chunks_wrote) / 1024) / 1024
-        ct_length_mb = (int(p_content_length) / 1024) / 1024 if p_content_length else "???"
-        logger.info("Download %s : %.2f MB / %.2f MB",
-                   os.path.basename(p_url),
-                   size_wrote_chunks_mb,
-                   ct_length_mb)
+        ct_length_mb = (
+            (int(p_content_length) / 1024) / 1024 if p_content_length else "???"
+        )
+        logger.info(
+            "Download %s : %.2f MB / %.2f MB",
+            os.path.basename(p_url),
+            size_wrote_chunks_mb,
+            ct_length_mb,
+        )
         return now
     return p_last_show
 
@@ -47,8 +55,8 @@ async def download_file_async(url: str, file_path: Path) -> None:
 
     Parameters:
         url (str) : The url of file to download.
-        file_path (Path) : 
-            The path where the file must write. 
+        file_path (Path) :
+            The path where the file must write.
             Path must be writable and the parents folder must exist.
     """
     async with aiohttp.ClientSession() as session:
@@ -68,8 +76,9 @@ async def download_file_async(url: str, file_path: Path) -> None:
                             break
                         f.write(chunk)
                         nb_chunks_wrote += 1
-                        last_show = show_progress(url, content_length,
-                                                  chunk_size, nb_chunks_wrote, last_show)
+                        last_show = show_progress(
+                            url, content_length, chunk_size, nb_chunks_wrote, last_show
+                        )
         except (aiohttp.ClientConnectionError, aiohttp.InvalidURL):
             logger.error("Connection error from %s", url)
             raise
@@ -83,7 +92,7 @@ async def download_file_async(url: str, file_path: Path) -> None:
     logger.info("Download done")
 
 
-def unzip_file(path: Path, dst_folder: Path) -> None :
+def unzip_file(path: Path, dst_folder: Path) -> None:
     """
     Unzip a zip file to destination folder.
 
@@ -114,19 +123,23 @@ async def unzip_file_async(path: Path, dst_folder: Path) -> None:
     """
     loop = asyncio.get_running_loop()
     with ThreadPoolExecutor() as pool:
-        await loop.run_in_executor(
-            pool,
-            unzip_file, path, dst_folder
-        )
+        await loop.run_in_executor(pool, unzip_file, path, dst_folder)
 
 
-async def read_file(file_path: Path) -> Any:
+async def read_csv(file_path: Path) -> Any:
+    async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:
+        contents = await f.readlines()
+        reader = csv.DictReader(contents, delimiter=",", lineterminator="\n")
+        return reader
+
+
+async def read_json(file_path: Path) -> Any:
     async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:
         contents = await f.read()
         return json.loads(contents)
 
 
-async def read_files_from_directory(directory: Path) -> AsyncIterator[Any]:
+async def read_jsons_from_directory(directory: Path) -> AsyncIterator[Any]:
     """
     Reads and yields the Any data of each file in a given directory.
     Skips files that cannot be read or parsed.
@@ -140,7 +153,7 @@ async def read_files_from_directory(directory: Path) -> AsyncIterator[Any]:
     for file in os.listdir(directory):
         file_path = directory / file
         try:
-            yield await read_file(file_path)
+            yield await read_json(file_path)
         except (OSError, json.JSONDecodeError) as e:
             logger.error("Error reading %s: %s", file, e)
             continue

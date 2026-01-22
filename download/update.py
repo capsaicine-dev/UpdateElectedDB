@@ -7,11 +7,16 @@ import asyncio
 from pathlib import Path
 import tempfile
 
-from common.config import UPDATE_URL_DOWNLOAD_DEPUTES, UPDATE_URL_DOWNLOAD_SENAT
+from common.config import (
+    UPDATE_URL_DOWNLOAD_DEPUTES,
+    UPDATE_URL_DOWNLOAD_SENAT,
+    UPDATE_URL_DOWNLOAD_EUROPARL,
+)
 from download.core import download_file_async, unzip_file_async
 from common.logger import logger
 from process.depute import process_file_deputy_async
 from process.senat import process_file_senat_async
+from process.europarl import process_file_europarl_async
 
 
 def show_error_on_exception(msg: str, exception: Exception) -> None:
@@ -24,6 +29,7 @@ async def update_deputes(download_temp: Path, zip_temp: Path) -> None:
     """
     Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_DEPUTES.
     """
+    logger.info("=== Update starting for deputes ===")
     # Download File to zip download folder
     zip_file_deputes: Path = download_temp / "data_deputes.zip"
     try:
@@ -50,11 +56,14 @@ async def update_deputes(download_temp: Path, zip_temp: Path) -> None:
         show_error_on_exception("process failed", e)
         raise e
 
+    logger.info("=== Update success for deputes ===")
 
-async def update_senat(download_temp: Path, zip_temp: Path) -> None:
+
+async def update_senat(download_temp: Path) -> None:
     """
     Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_SENAT.
     """
+    logger.info("=== Update starting for senat ===")
     # Download File to zip download folder
     file_senat: Path = download_temp / "data_senat.json"
     try:
@@ -70,6 +79,32 @@ async def update_senat(download_temp: Path, zip_temp: Path) -> None:
     except Exception as e:
         show_error_on_exception("process failed", e)
         raise e
+
+    logger.info("=== Update success for senat ===")
+
+
+async def update_europarl(download_temp: Path) -> None:
+    """
+    Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_EUROPARL.
+    """
+    logger.info("=== Update starting for europarl ===")
+    # Download File to zip download folder
+    file_europarl: Path = download_temp / "data_europarl.csv"
+    try:
+        await download_file_async(UPDATE_URL_DOWNLOAD_EUROPARL, file_europarl)
+    except Exception as e:
+        show_error_on_exception("download failed", e)
+        raise e
+
+    await asyncio.sleep(0.1)
+
+    try:
+        await process_file_europarl_async(file_europarl)
+    except Exception as e:
+        show_error_on_exception("process failed", e)
+        raise e
+
+    logger.info("=== Update success for europarl ===")
 
 
 async def update_async() -> None:
@@ -88,9 +123,18 @@ async def update_async() -> None:
         zip_path: Path = Path(zip_temp)
         try:
             await update_deputes(download_path, zip_path)
-            await update_senat(download_path, zip_path)
         except Exception as e:
-            logger.error("=== Update acteur failed ===")
+            logger.error("=== Update deputes failed ===")
+            raise e
+        try:
+            await update_senat(download_path)
+        except Exception as e:
+            logger.error("=== Update senat failed ===")
+            raise e
+        try:
+            await update_europarl(download_path)
+        except Exception as e:
+            logger.error("=== Update europarl failed ===")
             raise e
 
     logger.info("=== Update success ===")

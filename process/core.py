@@ -8,7 +8,7 @@ from attrs import define
 from pathlib import Path
 
 from common.logger import logger
-from download.core import read_file
+from download.core import read_json
 
 
 ELECTION = "\u00e9lections g\u00e9n\u00e9rales"
@@ -26,6 +26,7 @@ class Elected:
     circonscription_num: str
     circonscription_name: str
     circonscription_code: str
+    country: str
     group_abv: str
     group_name: str
 
@@ -83,7 +84,7 @@ class Elected:
         if circonscription_ref:
             organe_file = organe_folder / f"{circonscription_ref}.json"
             try:
-                circonscription_data = await read_file(organe_file)
+                circonscription_data = await read_json(organe_file)
                 circonscription_name = circonscription_data["organe"]["libelle"]
             except OSError:
                 logger.warning(
@@ -95,7 +96,7 @@ class Elected:
         if group_ref:
             organe_file = organe_folder / f"{group_ref}.json"
             try:
-                group_data = await read_file(organe_file)
+                group_data = await read_json(organe_file)
                 group_abv = group_data["organe"]["libelleAbrege"]
                 group_name = group_data["organe"]["libelle"]
             except OSError:
@@ -121,6 +122,7 @@ class Elected:
             circonscription_num=circonscription_num,
             circonscription_name=circonscription_name,
             circonscription_code=circonscription_code,
+            country="France",
             group_abv=group_abv,
             group_name=group_name,
         )
@@ -152,6 +154,40 @@ class Elected:
             circonscription_num=circonscription_num,
             circonscription_name=circonscription_name,
             circonscription_code=circonscription_code,
+            country="France",
+            group_abv=group_abv,
+            group_name=group_name,
+        )
+
+    @classmethod
+    async def from_europarl_csv(cls, data: Any) -> Self:
+        ref: str = data["mep_identifier"]
+        last_name: str = data["mep_family_name"]
+        civ: str = data["mep_honorific_prefix"]
+        first_name: str = data["mep_given_name"]
+
+        group_abv: str = ""
+        group_name: str = data["mep_political_group"]
+        departement_num: str = ""
+        departement_name: str = ""
+        circonscription_num: str = ""
+        circonscription_name: str = ""
+        circonscription_code: str = ""
+        country: str = data["mep_country_of_representation"]
+        email: str = data["mep_email"]
+
+        return cls(
+            ref=ref,
+            civ=civ,
+            last_name=last_name,
+            first_name=first_name,
+            email=email,
+            departement_num=departement_num,
+            departement_name=departement_name,
+            circonscription_num=circonscription_num,
+            circonscription_name=circonscription_name,
+            circonscription_code=circonscription_code,
+            country=country,
             group_abv=group_abv,
             group_name=group_name,
         )
@@ -168,6 +204,7 @@ class Elected:
             "circonscription_num": self.circonscription_num,
             "circonscription_name": self.circonscription_name,
             "circonscription_code": self.circonscription_code,
+            "country": self.country,
             "group_abv": self.group_abv,
             "group_name": self.group_name,
         }

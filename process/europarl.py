@@ -12,34 +12,34 @@ import yaml
 
 from common.config import OUTPUT_FOLDER
 from common.logger import logger
-from download.core import read_jsons_from_directory
+from download.core import read_csv
 from process.core import Elected
 
 
-async def process_file_deputy_async(acteur_folder: Path, organe_folder: Path) -> None:
-    logger.info("Processing deputies files in %s", acteur_folder)
+async def process_file_europarl_async(europarl_file: Path) -> None:
+    logger.info("Processing europarl file %s", europarl_file)
 
-    deputies: List[Elected] = []
+    europarldeps: List[Elected] = []
 
-    async for data in read_jsons_from_directory(acteur_folder):
-        deputies.append(await Elected.from_deputy_json(data, organe_folder))
+    for data in await read_csv(europarl_file):
+        europarldeps.append(await Elected.from_europarl_csv(data))
 
-    deputies_dict: Dict[str, Any] = {
-        deputy.circonscription_code: deputy.to_dict() for deputy in deputies
+    europarldeps_dict: Dict[str, Any] = {
+        europarldep.ref: europarldep.to_dict() for europarldep in europarldeps
     }
 
     output: Dict[str, Any] = {
         "metadata": {
             "last_updated": datetime.now().isoformat(),
-            "count": len(deputies_dict),
+            "count": len(europarldeps_dict),
         },
-        "deputies": deputies_dict,
+        "deputies": europarldeps_dict,
     }
 
     async with aiofiles.open(
-        OUTPUT_FOLDER / "deputies.yaml", mode="w+", encoding="utf-8"
+        OUTPUT_FOLDER / "europarl.yaml", mode="w+", encoding="utf-8"
     ) as f:
         await f.write(yaml.dump(output))
         await f.flush()
 
-    logger.info("Process deputies done")
+    logger.info("Process europarl done")

@@ -45,7 +45,10 @@ UPDATE_URL_DOWNLOAD_SENAT = __load_env(
     "UPDATE_URL_DOWNLOAD_SENAT",
     "https://www.senat.fr/api-senat/senateurs.json",
 )  # URL to update senat
-
+UPDATE_URL_DOWNLOAD_EUROPARL = __load_env(
+    "UPDATE_URL_DOWNLOAD_EUROPARL",
+    "https://data.europarl.europa.eu/distribution/meps_10_70_fr.csv",
+)  # URL to update senat
 
 UPDATE_PROGRESS_SECOND = int(
     __load_env("UPDATE_DOWNLOAD_PROGRESS_SECOND", "2")
