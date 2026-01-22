@@ -1,26 +1,21 @@
 # Copyright (C) 2026 zizanibot
 # See LICENSE file for extended copyright information.
 # This file is part of UpdateElectedDB project from https://github.com/zizanibot/UpdateElectedDB.
-from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Self
 
 from attrs import define
-import aiofiles
-import yaml
+from pathlib import Path
 
-from common.config import OUTPUT_FOLDER
 from common.logger import logger
-from download.core import read_file, read_files_from_directory
+from download.core import read_file
 
 
 ELECTION = "\u00e9lections g\u00e9n\u00e9rales"
 
 
 @define
-class Deputy:
+class Elected:
     ref: str
     civ: str
     last_name: str
@@ -35,7 +30,7 @@ class Deputy:
     group_name: str
 
     @classmethod
-    async def from_json(cls, data: Any, organe_folder: Path) -> Self:
+    async def from_deputy_json(cls, data: Any, organe_folder: Path) -> Self:
         ref: str = data["acteur"]["uid"]["#text"]
         last_name: str = data["acteur"]["etatCivil"]["ident"]["nom"]
         civ: str = data["acteur"]["etatCivil"]["ident"]["civ"]
@@ -110,7 +105,7 @@ class Deputy:
             logger.warning("%s does not have any organe reference.", ref)
 
         adresses: List[Any] = data["acteur"]["adresses"]["adresse"]
-        email = ""
+        email: str = ""
         for adresse in adresses:
             if adresse["@xsi:type"] == "AdresseMail_Type":
                 email = adresse["valElec"]
@@ -130,7 +125,38 @@ class Deputy:
             group_name=group_name,
         )
 
-    def to_yaml_dict(self) -> Dict[str, Any]:
+    @classmethod
+    async def from_senat_json(cls, data: Any) -> Self:
+        ref: str = data["matricule"]
+        last_name: str = data["nom"]
+        civ: str = data["civilite"]
+        first_name: str = data["prenom"]
+
+        group_abv: str = data["groupe"]["code"]
+        group_name: str = data["groupe"]["libelle"]
+        departement_num: str = data["circonscription"]["code"]
+        departement_name: str = data["circonscription"]["libelle"]
+        circonscription_num: str = ""
+        circonscription_name: str = ""
+        circonscription_code: str = ""
+        email: str = ""
+
+        return cls(
+            ref=ref,
+            civ=civ,
+            last_name=last_name,
+            first_name=first_name,
+            email=email,
+            departement_num=departement_num,
+            departement_name=departement_name,
+            circonscription_num=circonscription_num,
+            circonscription_name=circonscription_name,
+            circonscription_code=circonscription_code,
+            group_abv=group_abv,
+            group_name=group_name,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "ref": self.ref,
             "civ": self.civ,
@@ -145,30 +171,3 @@ class Deputy:
             "group_abv": self.group_abv,
             "group_name": self.group_name,
         }
-
-
-async def process_file_async(acteur_folder: Path, organe_folder: Path) -> None:
-    deputies: List[Deputy] = []
-
-    async for data in read_files_from_directory(acteur_folder):
-        deputies.append(await Deputy.from_json(data, organe_folder))
-
-    deputies_dict: Dict[str, Any] = {
-        deputy.circonscription_code: deputy.to_yaml_dict() for deputy in deputies
-    }
-
-    output: Dict[str, Any] = {
-        "metadata": {
-            "last_updated": datetime.now().isoformat(),
-            "count": len(deputies_dict),
-        },
-        "deputies": deputies_dict,
-    }
-
-    async with aiofiles.open(
-        OUTPUT_FOLDER / "deputies.yaml", mode="w+", encoding="utf-8"
-    ) as f:
-        await f.write(yaml.dump(output))
-        await f.flush()
-
-    logger.info("Process done")

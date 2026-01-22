@@ -7,10 +7,11 @@ import asyncio
 from pathlib import Path
 import tempfile
 
-from common.config import UPDATE_URL_DOWNLOAD_ACTEUR_ORGANE
+from common.config import UPDATE_URL_DOWNLOAD_DEPUTES, UPDATE_URL_DOWNLOAD_SENAT
 from download.core import download_file_async, unzip_file_async
 from common.logger import logger
-from download.process import process_file_async
+from process.depute import process_file_deputy_async
+from process.senat import process_file_senat_async
 
 
 def show_error_on_exception(msg: str, exception: Exception) -> None:
@@ -19,16 +20,14 @@ def show_error_on_exception(msg: str, exception: Exception) -> None:
     logger.error("Error : %s", str(exception))
 
 
-async def update_acteur_organe(download_temp: Path, zip_temp: Path) -> None:
+async def update_deputes(download_temp: Path, zip_temp: Path) -> None:
     """
-    Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_ACTEUR_ORGANE.
+    Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_DEPUTES.
     """
     # Download File to zip download folder
-    zip_file_acteur_organe: Path = download_temp / "data_acteur_organe.zip"
+    zip_file_deputes: Path = download_temp / "data_deputes.zip"
     try:
-        await download_file_async(
-            UPDATE_URL_DOWNLOAD_ACTEUR_ORGANE, zip_file_acteur_organe
-        )
+        await download_file_async(UPDATE_URL_DOWNLOAD_DEPUTES, zip_file_deputes)
     except Exception as e:
         show_error_on_exception("download failed", e)
         raise e
@@ -36,17 +35,38 @@ async def update_acteur_organe(download_temp: Path, zip_temp: Path) -> None:
     await asyncio.sleep(0.1)
 
     # Unzip File to zip temp folder
-    zip_temp_acteur_organe: Path = zip_temp / "acteur_organe"
+    zip_temp_deputes: Path = zip_temp / "deputes"
     try:
-        await unzip_file_async(zip_file_acteur_organe, zip_temp_acteur_organe)
+        await unzip_file_async(zip_file_deputes, zip_temp_deputes)
     except Exception as e:
         show_error_on_exception("unzipping failed", e)
         raise e
 
-    temp_acteur: Path = zip_temp_acteur_organe / "json" / "acteur"
-    temp_organe: Path = zip_temp_acteur_organe / "json" / "organe"
+    temp_acteur: Path = zip_temp_deputes / "json" / "acteur"
+    temp_organe: Path = zip_temp_deputes / "json" / "organe"
     try:
-        await process_file_async(temp_acteur, temp_organe)
+        await process_file_deputy_async(temp_acteur, temp_organe)
+    except Exception as e:
+        show_error_on_exception("process failed", e)
+        raise e
+
+
+async def update_senat(download_temp: Path, zip_temp: Path) -> None:
+    """
+    Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_SENAT.
+    """
+    # Download File to zip download folder
+    file_senat: Path = download_temp / "data_senat.json"
+    try:
+        await download_file_async(UPDATE_URL_DOWNLOAD_SENAT, file_senat)
+    except Exception as e:
+        show_error_on_exception("download failed", e)
+        raise e
+
+    await asyncio.sleep(0.1)
+
+    try:
+        await process_file_senat_async(file_senat)
     except Exception as e:
         show_error_on_exception("process failed", e)
         raise e
@@ -55,7 +75,7 @@ async def update_acteur_organe(download_temp: Path, zip_temp: Path) -> None:
 async def update_async() -> None:
     """
     Update the data folder with fresh data from
-    UPDATE_URL_DOWNLOAD_ACTEUR_ORGANE.
+    UPDATE_URL_DOWNLOAD_deputes.
     """
 
     logger.info("=== Update starting ===")
@@ -67,7 +87,8 @@ async def update_async() -> None:
         download_path: Path = Path(download_temp)
         zip_path: Path = Path(zip_temp)
         try:
-            await update_acteur_organe(download_path, zip_path)
+            await update_deputes(download_path, zip_path)
+            await update_senat(download_path, zip_path)
         except Exception as e:
             logger.error("=== Update acteur failed ===")
             raise e

@@ -1,6 +1,5 @@
 PYTHON=python
 BASE_FOLDER?=.
-OUTPUT_FOLDER?=data
 ifeq ($(OS),Windows_NT)
   VENV=$(BASE_FOLDER)\.venv
   BIN=$(VENV)\Scripts
@@ -31,7 +30,7 @@ install: install_venv
 
 # run
 run:
-	$(VENV_PYTHON) $(MAIN) --output $(OUTPUT_FOLDER)
+	$(VENV_PYTHON) $(MAIN)
 
 # type annotations
 mypy:
