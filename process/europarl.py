@@ -33,7 +33,7 @@ async def process_file_europarl_async(europarl_file: Path) -> None:
             "last_updated": datetime.now().isoformat(),
             "count": len(europarldeps_dict),
         },
-        "deputies": europarldeps_dict,
+        "members": europarldeps_dict,
     }
 
     async with aiofiles.open(

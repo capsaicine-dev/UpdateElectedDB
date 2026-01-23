@@ -33,7 +33,7 @@ async def process_file_deputy_async(acteur_folder: Path, organe_folder: Path) ->
             "last_updated": datetime.now().isoformat(),
             "count": len(deputies_dict),
         },
-        "deputies": deputies_dict,
+        "members": deputies_dict,
     }
 
     async with aiofiles.open(
