@@ -4,8 +4,9 @@
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Self
 
+from attrs import define
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,12 +20,6 @@ def __load_env(name: str, default: str) -> str:
     """Loads an environment variable either from the environment or from a default generating function."""
     value = os.getenv(name)
     return value if value else default
-
-
-def __load_env_or_none(name: str) -> Optional[str]:
-    """Loads an environment variable from the environment or return None."""
-    value = os.getenv(name)
-    return value
 
 
 def __load_env_required(name: str) -> str:
@@ -43,7 +38,7 @@ UPDATE_URL_DOWNLOAD_DEPUTES = __load_env(
 )  # URL to update deputes
 UPDATE_URL_DOWNLOAD_SENAT = __load_env(
     "UPDATE_URL_DOWNLOAD_SENAT",
-    "https://www.senat.fr/api-senat/senateurs.json",
+    "https://data.senat.fr/data/senateurs/export_sens.zip",
 )  # URL to update senat
 UPDATE_URL_DOWNLOAD_EUROPARL = __load_env(
     "UPDATE_URL_DOWNLOAD_EUROPARL",
@@ -55,11 +50,23 @@ UPDATE_PROGRESS_SECOND = int(
 )  # Download progress update in second, if 0 is disabled
 
 OUTPUT_FOLDER = Path(__load_env_required("OUTPUT_FOLDER"))  # Path to "data" folder
-EMAIL_SENAT_FILE = (
-    Path(email_path)
-    if (email_path := __load_env_or_none("EMAIL_SENAT_FILE")) is not None
-    else None
-)  # Path to the email file
+
+
+# postgres options for the senat export
+@define
+class PostgresOptions:
+    database: str
+    user: str
+    password: str
+    host: str
+
+
+POSTGRES_OPTIONS = PostgresOptions(
+    database=__load_env("POSTGRES_DATABASE", "senat_db"),
+    user=__load_env("POSTGRES_USER", "postgres"),
+    password=__load_env_required("POSTGRES_PASSWORD"),
+    host=__load_env("POSTGRES_HOST", "localhost"),
+)
 
 # Logs
 LOG_PATH = __load_env("LOG_PATH", "interpelmail_update.log")  # Path to the log file

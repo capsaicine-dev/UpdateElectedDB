@@ -128,20 +128,20 @@ class Elected:
         )
 
     @classmethod
-    async def from_senat_json(cls, data: Any) -> Self:
-        ref: str = data["matricule"]
-        last_name: str = data["nom"]
-        civ: str = data["civilite"]
-        first_name: str = data["prenom"]
+    async def from_senat(cls, data: Any) -> Self:
+        ref: str = data["senmat"]
+        last_name: str = data["sennomuse"]
+        civ: str = data["quacod"]
+        first_name: str = data["senprenomuse"]
 
-        group_abv: str = data["groupe"]["code"]
-        group_name: str = data["groupe"]["libelle"]
-        departement_num: str = data["circonscription"]["code"]
-        departement_name: str = data["circonscription"]["libelle"]
+        group_abv: str = data["grppolcod"]
+        group_name: str = data["grppollilcou"]
+        departement_num: str = data["dptcod"]
+        departement_name: str = data["dptlib"]
         circonscription_num: str = ""
         circonscription_name: str = ""
         circonscription_code: str = ""
-        email: str = ""
+        email: str = data["senema"]
 
         return cls(
             ref=ref,

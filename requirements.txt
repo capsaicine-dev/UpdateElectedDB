@@ -10,3 +10,5 @@ mypy
 aiofiles
 types-aiofiles
 attrs
+asyncpg
+asyncpg-stubs

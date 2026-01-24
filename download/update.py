@@ -48,6 +48,8 @@ async def update_deputes(download_temp: Path, zip_temp: Path) -> None:
         show_error_on_exception("unzipping failed", e)
         raise e
 
+    await asyncio.sleep(0.1)
+
     temp_acteur: Path = zip_temp_deputes / "json" / "acteur"
     temp_organe: Path = zip_temp_deputes / "json" / "organe"
     try:
@@ -59,23 +61,34 @@ async def update_deputes(download_temp: Path, zip_temp: Path) -> None:
     logger.info("=== Update success for deputes ===")
 
 
-async def update_senat(download_temp: Path) -> None:
+async def update_senat(download_temp: Path, zip_temp: Path) -> None:
     """
     Update the data folder with fresh data from UPDATE_URL_DOWNLOAD_SENAT.
     """
     logger.info("=== Update starting for senat ===")
     # Download File to zip download folder
-    file_senat: Path = download_temp / "data_senat.json"
+    zip_file_senat: Path = download_temp / "data_senat.zip"
     try:
-        await download_file_async(UPDATE_URL_DOWNLOAD_SENAT, file_senat)
+        await download_file_async(UPDATE_URL_DOWNLOAD_SENAT, zip_file_senat)
     except Exception as e:
         show_error_on_exception("download failed", e)
         raise e
 
     await asyncio.sleep(0.1)
 
+    # Unzip File to zip temp folder
+    zip_temp_senat: Path = zip_temp / "senat"
     try:
-        await process_file_senat_async(file_senat)
+        await unzip_file_async(zip_file_senat, zip_temp_senat)
+    except Exception as e:
+        show_error_on_exception("unzipping failed", e)
+        raise e
+
+    await asyncio.sleep(0.1)
+
+    temp_senat: Path = zip_temp_senat / "export_sens.sql"
+    try:
+        await process_file_senat_async(temp_senat)
     except Exception as e:
         show_error_on_exception("process failed", e)
         raise e
@@ -127,7 +140,7 @@ async def update_async() -> None:
             logger.error("=== Update deputes failed ===")
             raise e
         try:
-            await update_senat(download_path)
+            await update_senat(download_path, zip_path)
         except Exception as e:
             logger.error("=== Update senat failed ===")
             raise e

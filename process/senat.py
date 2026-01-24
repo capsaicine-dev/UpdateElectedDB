@@ -3,39 +3,101 @@
 # This file is part of UpdateElectedDB project from https://github.com/zizanibot/UpdateElectedDB.
 from __future__ import annotations
 
-import csv
+import os
+import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List
 
 import aiofiles
 import yaml
+import asyncpg
 
-from common.config import OUTPUT_FOLDER, EMAIL_SENAT_FILE
+from common.config import OUTPUT_FOLDER, POSTGRES_OPTIONS
 from common.logger import logger
-from download.core import read_json, read_csv
 from process.core import Elected
 
 
-async def add_email_adresses(senats_dict: Dict[str, Elected]) -> None:
-    email_dict: Dict[str, str] = {}
+async def export_from_sql_file(senat_sql_file: Path) -> List[Any]:
+    env = os.environ.copy()
+    env["PGPASSWORD"] = POSTGRES_OPTIONS.password
 
-    if not EMAIL_SENAT_FILE:
-        logger.warning("Cannot add email addresses for senat")
-        return
+    logger.info("Creating database %s", POSTGRES_OPTIONS.database)
+    conn = await asyncpg.connect(
+        database="postgres",
+        user=POSTGRES_OPTIONS.user,
+        password=POSTGRES_OPTIONS.password,
+        host=POSTGRES_OPTIONS.host,
+    )
 
-    email_reader: csv.DictReader = await read_csv(EMAIL_SENAT_FILE)
-    for row in email_reader:
-        email_dict[row["senmat"]] = row["senema"]
+    await conn.execute(f"DROP DATABASE IF EXISTS {POSTGRES_OPTIONS.database}")
+    await conn.execute(f"CREATE DATABASE {POSTGRES_OPTIONS.database}")
+    await conn.close()
 
-    missing_email: Set[str] = senats_dict.keys() - email_dict.keys()
-    found_email: Set[str] = senats_dict.keys() & email_dict.keys()
+    logger.info("Loading %s", senat_sql_file)
+    conn = await asyncpg.connect(
+        database=POSTGRES_OPTIONS.database,
+        user=POSTGRES_OPTIONS.user,
+        password=POSTGRES_OPTIONS.password,
+        host=POSTGRES_OPTIONS.host,
+    )
 
-    for id in missing_email:
-        logger.warning("MISSING EMAIL FOR: %s", senats_dict[id])
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            POSTGRES_OPTIONS.database,
+            "-h",
+            POSTGRES_OPTIONS.host,
+            "-f",
+            str(senat_sql_file),
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
 
-    for id in found_email:
-        senats_dict[id].email = email_dict[id]
+        if process.returncode != 0:
+            raise Exception(f"psql failed: {stderr.decode()}")
+
+        logger.info("%s correcly loaded", senat_sql_file)
+
+        rows = await conn.fetch(
+            """select 
+	sen.senmat, 
+	sen.quacod, 
+	sen.sennomuse, 
+	sen.senprenomuse, 
+	dpt.dptcod,
+	dpt.dptlib,
+	grppol.grppolcod,
+	grppol.grppollilcou, 
+	sen.senema 
+from sen 
+join grppol on grppol.grppolcod = sen.sengrppolcodcou
+join dpt on dpt.dptnum = sen.sencirnumcou
+where etasencod = 'ACTIF'"""
+        )
+
+        logger.info(f"Found {len(rows)} rows")
+
+    finally:
+        await conn.close()
+
+    logger.info("Cleaning up database %s", POSTGRES_OPTIONS.database)
+    conn = await asyncpg.connect(
+        database="postgres",
+        user=POSTGRES_OPTIONS.user,
+        password=POSTGRES_OPTIONS.password,
+        host=POSTGRES_OPTIONS.host,
+    )
+
+    await conn.execute(f"DROP DATABASE IF EXISTS {POSTGRES_OPTIONS.database}")
+    await conn.close()
+
+    return rows
 
 
 async def process_file_senat_async(senat_file: Path) -> None:
@@ -43,18 +105,17 @@ async def process_file_senat_async(senat_file: Path) -> None:
 
     senats: List[Elected] = []
 
-    for data in await read_json(senat_file):
-        senats.append(await Elected.from_senat_json(data))
+    for data in await export_from_sql_file(senat_file):
+        senats.append(await Elected.from_senat(data))
 
-    senats_dict: Dict[str, Elected] = {senat.ref: senat for senat in senats}
-    await add_email_adresses(senats_dict)
+    senats_dict: Dict[str, Any] = {senat.ref: senat.to_dict() for senat in senats}
 
     output: Dict[str, Any] = {
         "metadata": {
             "last_updated": datetime.now().isoformat(),
             "count": len(senats_dict),
         },
-        "members": {k: v.to_dict() for k, v in senats_dict.items()},
+        "members": senats_dict,
     }
 
     async with aiofiles.open(
