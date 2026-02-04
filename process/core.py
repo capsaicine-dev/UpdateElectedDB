@@ -2,7 +2,7 @@
 # See LICENSE file for extended copyright information.
 # This file is part of UpdateElectedDB project from https://github.com/zizanibot/UpdateElectedDB.
 
-from typing import Any, Dict, List, Optional, Self
+from typing import Any, Dict, List, Optional, Self, Union
 
 from attrs import define
 from pathlib import Path
@@ -50,66 +50,86 @@ class Elected:
         circonscription_code: str = ""
         elec_found: bool = False
 
-        for mandat in mandats:
-            if not elec_found and "election" in mandat:
-                elec = mandat["election"]
-                if elec:
-                    if (
-                        isinstance(elec["causeMandat"], list)
-                        and ELECTION in elec["causeMandat"]
-                    ):
-                        elec_found = True
-                    elif (
-                        isinstance(elec["causeMandat"], str)
-                        and ELECTION == elec["causeMandat"].lower()
-                    ):
-                        elec_found = True
-            if (
-                not group_ref
-                and "typeOrgane" in mandat
-                and "GP" == mandat["typeOrgane"]
-            ):
-                group_ref = mandat["organes"]["organeRef"]
+        try:
+            for mandat in mandats:
+                if not elec_found and "election" in mandat:
+                    elec = mandat["election"]
+                    if elec:
+                        if (
+                            isinstance(elec["causeMandat"], list)
+                            and ELECTION in elec["causeMandat"]
+                        ):
+                            elec_found = True
+                        elif (
+                            isinstance(elec["causeMandat"], str)
+                            and ELECTION == elec["causeMandat"].lower()
+                        ):
+                            elec_found = True
+                if (
+                    not group_ref
+                    and "typeOrgane" in mandat
+                    and "GP" == mandat["typeOrgane"]
+                ):
+                    group_ref = mandat["organes"]["organeRef"]
+        except:
+            logger.error("Couldn't process election for %s", ref)
+            raise
 
-        if elec:
-            departement_num = elec["lieu"]["numDepartement"]
-            departement_name = elec["lieu"]["departement"]
-            circonscription_num = elec["lieu"]["numCirco"]
-            circonscription_ref = elec["refCirconscription"]
+        try:
+            if elec:
+                departement_num = elec["lieu"]["numDepartement"]
+                departement_name = elec["lieu"]["departement"]
+                circonscription_num = elec["lieu"]["numCirco"]
+                circonscription_ref = elec["refCirconscription"]
 
-            if len(circonscription_num) == 1:
-                circonscription_num = "0" + circonscription_num
-            circonscription_code = f"{departement_num}{circonscription_num}"
+                if len(circonscription_num) == 1:
+                    circonscription_num = "0" + circonscription_num
+                circonscription_code = f"{departement_num}{circonscription_num}"
 
-        if circonscription_ref:
-            organe_file = organe_folder / f"{circonscription_ref}.json"
-            try:
-                circonscription_data = await read_json(organe_file)
-                circonscription_name = circonscription_data["organe"]["libelle"]
-            except OSError:
-                logger.warning(
-                    "Cannot find the organe file %s for %s", circonscription_ref, ref
-                )
-        else:
-            logger.warning("%s does not have any organe reference.", ref)
+            if circonscription_ref:
+                organe_file = organe_folder / f"{circonscription_ref}.json"
+                try:
+                    circonscription_data = await read_json(organe_file)
+                    circonscription_name = circonscription_data["organe"]["libelle"]
+                except OSError:
+                    logger.warning(
+                        "Cannot find the organe file %s for %s",
+                        circonscription_ref,
+                        ref,
+                    )
+            else:
+                logger.warning("%s does not have any organe reference.", ref)
 
-        if group_ref:
-            organe_file = organe_folder / f"{group_ref}.json"
-            try:
-                group_data = await read_json(organe_file)
-                group_abv = group_data["organe"]["libelleAbrege"]
-                group_name = group_data["organe"]["libelle"]
-            except OSError:
-                logger.warning("Cannot find the organe file %s for %s", group_ref, ref)
+            if group_ref:
+                organe_file = organe_folder / f"{group_ref}.json"
+                try:
+                    group_data = await read_json(organe_file)
+                    group_abv = group_data["organe"]["libelleAbrege"]
+                    group_name = group_data["organe"]["libelle"]
+                except OSError:
+                    logger.warning(
+                        "Cannot find the organe file %s for %s", group_ref, ref
+                    )
+            else:
+                logger.warning("%s does not have any organe reference.", ref)
+        except:
+            logger.error("Couldn't process election information for %s", ref)
+            raise
 
-        else:
-            logger.warning("%s does not have any organe reference.", ref)
+        try:
+            adresses: Union[List[Any], Any] = data["acteur"]["adresses"]["adresse"]
+            email: str = ""
 
-        adresses: List[Any] = data["acteur"]["adresses"]["adresse"]
-        email: str = ""
-        for adresse in adresses:
-            if adresse["@xsi:type"] == "AdresseMail_Type":
-                email = adresse["valElec"]
+            if isinstance(adresses, list):
+                for adresse in adresses:
+                    if adresse["@xsi:type"] == "AdresseMail_Type":
+                        email = adresse["valElec"]
+            else:
+                if adresses["@xsi:type"] == "AdresseMail_Type":
+                    email = adresses["valElec"]
+        except:
+            logger.error("Couldn't process email addresses for %s: %s", ref)
+            raise
 
         return cls(
             ref=ref,
