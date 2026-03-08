@@ -265,5 +265,5 @@ class Elected:
             "country": self.country,
             "group_abv": self.group_abg,
             "group_name": self.group_name,
-            "commissions": [o.to_dict() for o in self.organes],
+            "organes": [o.to_dict() for o in self.organes],
         }
