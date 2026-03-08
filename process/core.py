@@ -33,10 +33,9 @@ class Organe:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            self.abv: {
-                "name": self.name,
-                "abg": self.abg,
-            }
+            "abv": self.abv,
+            "name": self.name,
+            "abg": self.abg,
         }
 
 
