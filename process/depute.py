@@ -25,7 +25,7 @@ async def process_file_deputy_async(acteur_folder: Path, organe_folder: Path) ->
         deputies.append(await Elected.from_deputy_json(data, organe_folder))
 
     deputies_dict: Dict[str, Any] = {
-        deputy.circonscription_code: deputy.to_dict() for deputy in deputies
+        deputy.ref: deputy.to_dict() for deputy in deputies
     }
 
     output: Dict[str, Any] = {

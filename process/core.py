@@ -2,7 +2,7 @@
 # See LICENSE file for extended copyright information.
 # This file is part of UpdateElectedDB project from https://github.com/zizanibot/UpdateElectedDB.
 
-from typing import Any, Dict, List, Optional, Self, Union
+from typing import Any, Dict, List, Optional, Self, Union, Set
 
 from attrs import define
 from pathlib import Path
@@ -12,6 +12,32 @@ from download.core import read_json
 
 
 ELECTION = "\u00e9lections g\u00e9n\u00e9rales"
+GROUPE_PARLEMENTAIRE = "GP"
+COMMISSION_PERMANENTE = "COMPER"
+ORGANES = [GROUPE_PARLEMENTAIRE, COMMISSION_PERMANENTE]
+
+
+@define
+class Organe:
+    abv: str
+    name: str
+    abg: str
+
+    @classmethod
+    def from_str(cls, abv: str, name: str, abg: str) -> Self:
+        return cls(
+            abv=abv,
+            name=name,
+            abg=abg,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            self.abv: {
+                "name": self.name,
+                "abg": self.abg,
+            }
+        }
 
 
 @define
@@ -27,8 +53,9 @@ class Elected:
     circonscription_name: str
     circonscription_code: str
     country: str
-    group_abv: str
+    group_abg: str
     group_name: str
+    organes: List[Organe]
 
     @classmethod
     async def from_deputy_json(cls, data: Any, organe_folder: Path) -> Self:
@@ -39,9 +66,10 @@ class Elected:
         mandats: List[Any] = data["acteur"]["mandats"]["mandat"]
 
         elec: Optional[Dict[str, Any]] = None
-        group_ref: str = ""
-        group_abv: str = ""
+        organe_refs: Set[str] = set()
+        group_abg: str = ""
         group_name: str = ""
+        organes: List[Organe] = []
         circonscription_ref: str = ""
         departement_num: str = ""
         departement_name: str = ""
@@ -65,12 +93,8 @@ class Elected:
                             and ELECTION == elec["causeMandat"].lower()
                         ):
                             elec_found = True
-                if (
-                    not group_ref
-                    and "typeOrgane" in mandat
-                    and "GP" == mandat["typeOrgane"]
-                ):
-                    group_ref = mandat["organes"]["organeRef"]
+                if "typeOrgane" in mandat and mandat["typeOrgane"] in ORGANES:
+                    organe_refs.add(mandat["organes"]["organeRef"])
         except:
             logger.error("Couldn't process election for %s", ref)
             raise
@@ -100,18 +124,29 @@ class Elected:
             else:
                 logger.warning("%s does not have any organe reference.", ref)
 
-            if group_ref:
-                organe_file = organe_folder / f"{group_ref}.json"
+            if not organe_refs:
+                logger.warning("%s does not have any organe reference.", ref)
+
+            for organe_ref in organe_refs:
+                organe_file = organe_folder / f"{organe_ref}.json"
                 try:
-                    group_data = await read_json(organe_file)
-                    group_abv = group_data["organe"]["libelleAbrege"]
-                    group_name = group_data["organe"]["libelle"]
+                    organe_data = await read_json(organe_file)
+                    organe = organe_data["organe"]
+                    if organe["codeType"] == GROUPE_PARLEMENTAIRE:
+                        group_abg = organe["libelleAbrege"]
+                        group_name = organe["libelle"]
+                    elif organe["codeType"] == COMMISSION_PERMANENTE:
+                        organes.append(
+                            Organe.from_str(
+                                abv=organe["libelleAbrev"],
+                                name=organe["libelle"],
+                                abg=organe["libelleAbrege"],
+                            )
+                        )
                 except OSError:
                     logger.warning(
-                        "Cannot find the organe file %s for %s", group_ref, ref
+                        "Cannot find the organe file %s for %s", organe_ref, ref
                     )
-            else:
-                logger.warning("%s does not have any organe reference.", ref)
         except:
             logger.error("Couldn't process election information for %s", ref)
             raise
@@ -143,8 +178,9 @@ class Elected:
             circonscription_name=circonscription_name,
             circonscription_code=circonscription_code,
             country="France",
-            group_abv=group_abv,
+            group_abg=group_abg,
             group_name=group_name,
+            organes=organes,
         )
 
     @classmethod
@@ -154,7 +190,7 @@ class Elected:
         civ: str = data["quacod"]
         first_name: str = data["senprenomuse"]
 
-        group_abv: str = data["grppolcod"]
+        group_abg: str = data["grppolcod"]
         group_name: str = data["grppollilcou"]
         departement_num: str = data["dptcod"]
         departement_name: str = data["dptlib"]
@@ -175,8 +211,9 @@ class Elected:
             circonscription_name=circonscription_name,
             circonscription_code=circonscription_code,
             country="France",
-            group_abv=group_abv,
+            group_abg=group_abg,
             group_name=group_name,
+            organes=[],
         )
 
     @classmethod
@@ -186,7 +223,7 @@ class Elected:
         civ: str = data["mep_honorific_prefix"]
         first_name: str = data["mep_given_name"]
 
-        group_abv: str = ""
+        group_abg: str = ""
         group_name: str = data["mep_political_group"]
         departement_num: str = ""
         departement_name: str = ""
@@ -208,8 +245,9 @@ class Elected:
             circonscription_name=circonscription_name,
             circonscription_code=circonscription_code,
             country=country,
-            group_abv=group_abv,
+            group_abg=group_abg,
             group_name=group_name,
+            organes=[],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -225,6 +263,7 @@ class Elected:
             "circonscription_name": self.circonscription_name,
             "circonscription_code": self.circonscription_code,
             "country": self.country,
-            "group_abv": self.group_abv,
+            "group_abv": self.group_abg,
             "group_name": self.group_name,
+            "commissions": [o.to_dict() for o in self.organes],
         }
